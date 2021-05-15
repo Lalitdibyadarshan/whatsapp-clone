@@ -1,7 +1,8 @@
-import React, { useContext, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useState } from 'react'
 import useLocalStorage from '../hooks/useLocalStorage';
 import { useContacts } from './ContactContextProvider';
 import isEqual from 'lodash/isEqual';
+import { useSocket } from './SocketProvider';
 
 const ConversationContext = React.createContext();
 export function useConversation() {
@@ -12,6 +13,7 @@ export function ConversationContextProvider({ id, children }) {
     const [conversations, setConversations] = useLocalStorage('conversations', []);
     const [selectedConversationIndex, setSelectedConversationIndex] = useState(0);
     const { contacts } = useContacts();
+    const socket = useSocket();
 
     const updateConversations = (recipients) => {
         setConversations(prevConversations => {
@@ -42,10 +44,11 @@ export function ConversationContextProvider({ id, children }) {
     })
 
     const sendMessage = (recipients, text) => {
+        socket.emit('send-message', { recipients, text })
         addMessageToConversation({recipients, text, sender: id})
     }
 
-    const addMessageToConversation = ({ recipients, text, sender }) => {
+    const addMessageToConversation = useCallback(({ recipients, text, sender }) => {
         console.log('fefe,', recipients)
         setConversations(prevConversations => {
             let madeChange = false;
@@ -69,7 +72,7 @@ export function ConversationContextProvider({ id, children }) {
                 ]
             }
         });
-    }
+    }, [setConversations])
 
     const value = {
         conversations: formattedConversations,
@@ -78,6 +81,13 @@ export function ConversationContextProvider({ id, children }) {
         updateConversations,
         setSelectedConversationIndex
     }
+
+    
+    useEffect(() => {
+        if (socket == null) return;
+        socket.on('recieve-message', addMessageToConversation)
+        return () => socket.off('recieve-message')
+    }, [socket, addMessageToConversation])
 
     return (
         <ConversationContext.Provider value={value}>
